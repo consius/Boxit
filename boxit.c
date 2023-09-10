@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL2_gfxPrimitives.h>
+#include <math.h>
 
 // #define SIZEX 360
 // #define SIZEY 360
@@ -11,9 +12,14 @@
 #define LINE 1
 #define RED 1
 #define BLUE 2
+#define MENU_STATE 0
+#define PLAYING_STATE 1
+#define GAMEOVER_STATE 2
 
 SDL_Window* win;
 SDL_Renderer* rend;
+int windowx;
+int windowy;
 int xDots;
 int yDots;
 typedef struct {
@@ -26,16 +32,28 @@ typedef struct {
 int currentPlayer;
 int redBoxes;
 int blueBoxes;
+int gameState;
+SDL_Texture* title;
+SDL_Texture* redNums;
+SDL_Texture* blueNums;
+SDL_Rect blueNumsRect[10];
+SDL_Rect redNumsRect[10];
+SDL_Texture* redWon;
+SDL_Texture* blueWon;
+SDL_Texture* draw;
 
 int Init()
 {
+    // TODO improve error handling
     if(SDL_Init(SDL_INIT_VIDEO) < 0)
     {
         printf("Failed to Init SDL: %s", SDL_GetError());
         return -1;
     }
 
-    win = SDL_CreateWindow("Box it!", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, (xDots+1)*DOT_SPACE, (yDots+1)*DOT_SPACE, 0);
+    windowx = (xDots+1)*DOT_SPACE;
+    windowy = (yDots+1)*DOT_SPACE+100;
+    win = SDL_CreateWindow("Box it!", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowx, windowy, 0);
     if(win == NULL)
     {
         printf("Failed to create SDL Window: %s", SDL_GetError());
@@ -51,10 +69,153 @@ int Init()
         SDL_Quit();
         return -1;
     }
+
+    SDL_Surface* titleSurface = SDL_LoadBMP("./res/title.bmp");
+    if(titleSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        SDL_DestroyRenderer(rend);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return -1;
+    }
+    title = SDL_CreateTextureFromSurface(rend, titleSurface);
+    SDL_FreeSurface(titleSurface);
+
+    SDL_Surface* redNumsSurface = SDL_LoadBMP("./res/rednums.bmp");
+    if(redNumsSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        SDL_DestroyTexture(title);
+        SDL_DestroyRenderer(rend);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return -1;
+    }
+    redNums = SDL_CreateTextureFromSurface(rend, redNumsSurface);
+    SDL_FreeSurface(redNumsSurface);
+
+    SDL_Surface* blueNumsSurface = SDL_LoadBMP("./res/bluenums.bmp");
+    if(blueNumsSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        SDL_DestroyTexture(title);
+        SDL_DestroyTexture(redNums);
+        SDL_DestroyRenderer(rend);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return -1;
+    }
+    blueNums = SDL_CreateTextureFromSurface(rend, blueNumsSurface);
+    SDL_FreeSurface(blueNumsSurface);
+
+    for(int n = 0; n < 10; n++)
+    {
+        blueNumsRect[n].x = n*100;
+        blueNumsRect[n].y = 0;
+        blueNumsRect[n].w = 100;
+        blueNumsRect[n].h = 100;
+        redNumsRect[n].x = n*100;
+        redNumsRect[n].y = 0;
+        redNumsRect[n].w = 100;
+        redNumsRect[n].h = 100;
+    }
+
+    SDL_Surface* redWonSurface = SDL_LoadBMP("./res/redwon.bmp");
+    if(redWonSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        SDL_DestroyTexture(title);
+        SDL_DestroyTexture(redNums);
+        SDL_DestroyTexture(blueNums);
+        SDL_DestroyRenderer(rend);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return -1;
+    }
+    redWon = SDL_CreateTextureFromSurface(rend, redWonSurface);
+    SDL_FreeSurface(redWonSurface);
+
+    SDL_Surface* blueWonSurface = SDL_LoadBMP("./res/bluewon.bmp");
+    if(blueWonSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        SDL_DestroyTexture(title);
+        SDL_DestroyTexture(redNums);
+        SDL_DestroyTexture(blueNums);
+        SDL_DestroyTexture(redWon);
+        SDL_DestroyRenderer(rend);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return -1;
+    }
+    blueWon = SDL_CreateTextureFromSurface(rend, blueWonSurface);
+    SDL_FreeSurface(blueWonSurface);
+
+    SDL_Surface* drawSurface = SDL_LoadBMP("./res/draw.bmp");
+    if(drawSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        SDL_DestroyTexture(title);
+        SDL_DestroyTexture(redNums);
+        SDL_DestroyTexture(blueNums);
+        SDL_DestroyTexture(redWon);
+        SDL_DestroyTexture(blueWon);
+        SDL_DestroyRenderer(rend);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return -1;
+    }
+    draw = SDL_CreateTextureFromSurface(rend, drawSurface);
+    SDL_FreeSurface(drawSurface);
+
     return 0;
 }
 
-int Render(box* boxes)
+int DigitLen(int num)
+{
+    if(num <= 0)
+    {
+        return 1;
+    }
+    return (int)(log10(num)+1);
+}
+
+int RenderScore()
+{
+    int digit;
+    int lenRed = DigitLen(redBoxes);
+    int lenBlue = DigitLen(blueBoxes);
+    int rbox = redBoxes;
+    int bbox = blueBoxes;
+    SDL_Rect destRect = {.x = (lenRed-1)*100, .y = windowy-130, .w = 100, .h = 100};
+
+    if(rbox == 0)
+    {
+        SDL_RenderCopy(rend, redNums, &redNumsRect[0], &destRect);
+    }
+    while(rbox)
+    {
+        SDL_RenderCopy(rend, redNums, &redNumsRect[rbox%10], &destRect);
+        rbox /= 10;
+        destRect.x -= 100;
+    }
+
+    destRect.x = windowx-100;
+    if(bbox == 0)
+    {
+        SDL_RenderCopy(rend, blueNums, &blueNumsRect[0], &destRect);
+    }
+    while(bbox)
+    {
+        SDL_RenderCopy(rend, blueNums, &blueNumsRect[bbox%10], &destRect);
+        bbox /= 10;
+        destRect.x -= 100;
+    }
+    return 0;
+}
+
+int RenderBoard(box* boxes)
 {
     SDL_SetRenderDrawColor(rend, 215, 215, 215, 255);
     SDL_RenderClear(rend);
@@ -75,6 +236,7 @@ int Render(box* boxes)
     {
         for(int x = 1; x < xDots; x++)
         {
+            // TODO the Owner color part better
             if(boxes[(y*xDots)+x].owner == BLUE)
             {
                 SDL_SetRenderDrawColor(rend, 0, 0, 255, 255);
@@ -167,8 +329,64 @@ int Render(box* boxes)
         }
     }
 
+    RenderScore();
+
     SDL_RenderPresent(rend);
     return 0;
+}
+
+int RenderMenu()
+{
+    SDL_SetRenderDrawColor(rend, 215, 215, 215, 255);
+    SDL_RenderClear(rend);
+    SDL_Rect destRect = {.x = windowx/2-250/2, .y = windowy/2-125/2, .w = 250, .h = 125}; 
+    SDL_RenderCopy(rend, title, NULL, &destRect);
+    SDL_RenderPresent(rend);
+    return 0;
+}
+
+int RenderGameOver()
+{
+    SDL_SetRenderDrawColor(rend, 215, 215, 215, 255);
+    SDL_RenderClear(rend);
+    if(redBoxes > blueBoxes)
+    {
+        SDL_Rect destRect = {.x = windowx/2-250/2, .y = windowy/2-125/2, .w = 250, .h = 125}; 
+        SDL_RenderCopy(rend, redWon, NULL, &destRect);
+    }
+    else if(blueBoxes > redBoxes)
+    {
+        SDL_Rect destRect = {.x = windowx/2-250/2, .y = windowy/2-125/2, .w = 250, .h = 125};
+        SDL_RenderCopy(rend, blueWon, NULL, &destRect);
+    }
+    else
+    {
+        SDL_Rect destRect = {.x = windowx/2-250/2, .y = windowy/2-125/2, .w = 250, .h = 125}; 
+        SDL_RenderCopy(rend, draw, NULL, &destRect);
+    }
+    RenderScore();
+    SDL_RenderPresent(rend);
+    return 0;
+}
+
+int RenderGame(box* boxes)
+{
+    switch(gameState)
+    {
+        case MENU_STATE:
+            RenderMenu();
+            break;
+
+        case PLAYING_STATE:
+            RenderBoard(boxes);
+            break;
+
+        case GAMEOVER_STATE:
+            RenderGameOver();
+            break;
+
+        default: {}
+    }
 }
 
 int ChangePlayer()
@@ -202,7 +420,7 @@ int CheckOwn(box* boxes)
 
 int DrawLine(int x, int y, box* boxes)
 {
-    if(x <= DOT_SPACE-LINE_THICKNESS || y <= DOT_SPACE-LINE_THICKNESS || x >= ((xDots)*DOT_SPACE)+LINE_THICKNESS || y >= ((yDots)*DOT_SPACE)+LINE_THICKNESS)
+    if(x < DOT_SPACE-LINE_THICKNESS || y < DOT_SPACE-LINE_THICKNESS || x > ((xDots)*DOT_SPACE)+LINE_THICKNESS || y > ((yDots)*DOT_SPACE)+LINE_THICKNESS)
     {
         return 0;
     }
@@ -281,17 +499,8 @@ int checkWin(box* boxes)
     return 0;
 }
 
-int main(int argc, char** argv)
+int InitGame(box* boxes)
 {
-    xDots = 5;
-    yDots = 5;
-    if(Init() != 0)
-    {
-        return -1;
-    }
-
-    currentPlayer = RED;
-    box boxes[(yDots+1)*(xDots+1)];
     for(int y = 0; y <= yDots; y++)
     {
         for(int x = 0; x <= xDots; x++)
@@ -303,7 +512,20 @@ int main(int argc, char** argv)
             boxes[(y*xDots)+x].owner = EMPTY;
         }
     }
+}
 
+int main(int argc, char** argv)
+{
+    xDots = 5;
+    yDots = 5;
+    if(Init() != 0)
+    {
+        return -1;
+    }
+    gameState = MENU_STATE;
+    currentPlayer = RED;
+    box boxes[(yDots+1)*(xDots+1)];
+    InitGame(boxes);
     SDL_Event event;
     int quit = 0;
     while(!quit)
@@ -317,33 +539,47 @@ int main(int argc, char** argv)
                     break;
 
                 case SDL_MOUSEBUTTONDOWN:
-                    DrawLine(event.button.x, event.button.y, boxes);
+                    if(gameState == PLAYING_STATE)
+                    {
+                        DrawLine(event.button.x, event.button.y, boxes);
+                    }
+                    break;
+
+                case SDL_KEYDOWN:
+                    if(event.key.keysym.sym == SDLK_SPACE)
+                    {
+                        if(gameState == MENU_STATE)
+                        {
+                            //printf("space pressed startin game\n");
+                            gameState = PLAYING_STATE;
+                            break;
+                        }
+                        if(gameState == GAMEOVER_STATE)
+                        {
+                            gameState = MENU_STATE;
+                            InitGame(boxes);
+                            break;
+                        }
+                    }
                     break;
 
                 default: {}
             }
         }
-        Render(boxes);
-        if(checkWin(boxes))
+        RenderGame(boxes);
+        if(gameState == PLAYING_STATE && checkWin(boxes))
         {
-            printf("RED: %d       BLUE: %d\n", redBoxes, blueBoxes);
-            if(redBoxes > blueBoxes)
-            {
-                printf("RED WON!!\n");
-            }
-            else if(blueBoxes > redBoxes)
-            {
-                printf("BLUE WON!!\n");
-            }
-            else
-            {
-                printf("ITS A DRAW.\n");
-            }
-            quit = 1;
+            gameState = GAMEOVER_STATE;
         }
         SDL_Delay(16);
     }
 
+    SDL_DestroyTexture(title);
+    SDL_DestroyTexture(redNums);
+    SDL_DestroyTexture(blueNums);
+    SDL_DestroyTexture(redWon);
+    SDL_DestroyTexture(blueWon);
+    SDL_DestroyTexture(draw);
     SDL_DestroyRenderer(rend);
     SDL_DestroyWindow(win);
     SDL_Quit();
