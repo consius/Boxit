@@ -36,19 +36,20 @@ int gameState;
 SDL_Texture* title;
 SDL_Texture* redNums;
 SDL_Texture* blueNums;
-SDL_Rect blueNumsRect[10];
-SDL_Rect redNumsRect[10];
+SDL_Rect NumsRect[10];
 SDL_Texture* redWon;
 SDL_Texture* blueWon;
 SDL_Texture* draw;
 
+int Free();
+SDL_Texture* LoadTextureBMP(const char* file);
+
 int Init()
 {
-    // TODO improve error handling
     if(SDL_Init(SDL_INIT_VIDEO) < 0)
     {
         printf("Failed to Init SDL: %s", SDL_GetError());
-        return -1;
+        goto error;
     }
 
     windowx = (xDots+1)*DOT_SPACE;
@@ -57,119 +58,71 @@ int Init()
     if(win == NULL)
     {
         printf("Failed to create SDL Window: %s", SDL_GetError());
-        SDL_Quit();
-        return -1;
+        goto error;
     }
 
     rend = SDL_CreateRenderer(win, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
     if(rend == NULL)
     {
         printf("Failed to create SDL Renderer: %s", SDL_GetError());
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
+        goto error;
     }
 
-    SDL_Surface* titleSurface = SDL_LoadBMP("./res/title.bmp");
-    if(titleSurface == NULL)
-    {
-        printf("Failed to Load media: %s", SDL_GetError());
-        SDL_DestroyRenderer(rend);
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
-    }
-    title = SDL_CreateTextureFromSurface(rend, titleSurface);
-    SDL_FreeSurface(titleSurface);
+    title = LoadTextureBMP("./res/title.bmp");
+    if(title == NULL)
+        goto error;
 
-    SDL_Surface* redNumsSurface = SDL_LoadBMP("./res/rednums.bmp");
-    if(redNumsSurface == NULL)
-    {
-        printf("Failed to Load media: %s", SDL_GetError());
-        SDL_DestroyTexture(title);
-        SDL_DestroyRenderer(rend);
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
-    }
-    redNums = SDL_CreateTextureFromSurface(rend, redNumsSurface);
-    SDL_FreeSurface(redNumsSurface);
+    redNums = LoadTextureBMP("./res/rednums.bmp");
+    if(redNums == NULL)
+        goto error;
 
-    SDL_Surface* blueNumsSurface = SDL_LoadBMP("./res/bluenums.bmp");
-    if(blueNumsSurface == NULL)
-    {
-        printf("Failed to Load media: %s", SDL_GetError());
-        SDL_DestroyTexture(title);
-        SDL_DestroyTexture(redNums);
-        SDL_DestroyRenderer(rend);
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
-    }
-    blueNums = SDL_CreateTextureFromSurface(rend, blueNumsSurface);
-    SDL_FreeSurface(blueNumsSurface);
+    blueNums = LoadTextureBMP("./res/bluenums.bmp");
+    if(blueNums == NULL)
+        goto error;
 
-    for(int n = 0; n < 10; n++)
+    for(int n = 0; n < 10; n++) 
     {
-        blueNumsRect[n].x = n*100;
-        blueNumsRect[n].y = 0;
-        blueNumsRect[n].w = 100;
-        blueNumsRect[n].h = 100;
-        redNumsRect[n].x = n*100;
-        redNumsRect[n].y = 0;
-        redNumsRect[n].w = 100;
-        redNumsRect[n].h = 100;
+        NumsRect[n].x = n*100;
+        NumsRect[n].y = 0;
+        NumsRect[n].w = 100;
+        NumsRect[n].h = 100;
     }
 
-    SDL_Surface* redWonSurface = SDL_LoadBMP("./res/redwon.bmp");
-    if(redWonSurface == NULL)
-    {
-        printf("Failed to Load media: %s", SDL_GetError());
-        SDL_DestroyTexture(title);
-        SDL_DestroyTexture(redNums);
-        SDL_DestroyTexture(blueNums);
-        SDL_DestroyRenderer(rend);
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
-    }
-    redWon = SDL_CreateTextureFromSurface(rend, redWonSurface);
-    SDL_FreeSurface(redWonSurface);
+    redWon = LoadTextureBMP("./res/redwon.bmp");
+    if(redWon == NULL)
+        goto error;
 
-    SDL_Surface* blueWonSurface = SDL_LoadBMP("./res/bluewon.bmp");
-    if(blueWonSurface == NULL)
-    {
-        printf("Failed to Load media: %s", SDL_GetError());
-        SDL_DestroyTexture(title);
-        SDL_DestroyTexture(redNums);
-        SDL_DestroyTexture(blueNums);
-        SDL_DestroyTexture(redWon);
-        SDL_DestroyRenderer(rend);
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
-    }
-    blueWon = SDL_CreateTextureFromSurface(rend, blueWonSurface);
-    SDL_FreeSurface(blueWonSurface);
+    blueWon = LoadTextureBMP("./res/bluewon.bmp");
+    if(blueWon == NULL)
+        goto error;
 
-    SDL_Surface* drawSurface = SDL_LoadBMP("./res/draw.bmp");
-    if(drawSurface == NULL)
-    {
-        printf("Failed to Load media: %s", SDL_GetError());
-        SDL_DestroyTexture(title);
-        SDL_DestroyTexture(redNums);
-        SDL_DestroyTexture(blueNums);
-        SDL_DestroyTexture(redWon);
-        SDL_DestroyTexture(blueWon);
-        SDL_DestroyRenderer(rend);
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return -1;
-    }
-    draw = SDL_CreateTextureFromSurface(rend, drawSurface);
-    SDL_FreeSurface(drawSurface);
+    draw = LoadTextureBMP("./res/draw.bmp");
+    if(draw == NULL)
+        goto error;
 
     return 0;
+
+    error:
+    Free();
+    return -1;
+}
+
+SDL_Texture* LoadTextureBMP(const char* file)
+{
+    SDL_Surface* bmpSurface = SDL_LoadBMP(file);
+    if(bmpSurface == NULL)
+    {
+        printf("Failed to Load media: %s", SDL_GetError());
+        return NULL;
+    }
+    SDL_Texture* bmpTexture = SDL_CreateTextureFromSurface(rend, bmpSurface);
+    SDL_FreeSurface(bmpSurface);
+    if(bmpTexture == NULL)
+    {
+        printf("Failed to Create Texture From Surface: %s", SDL_GetError());
+        return NULL;
+    }
+    return bmpTexture;
 }
 
 int DigitLen(int num)
@@ -181,39 +134,32 @@ int DigitLen(int num)
     return (int)(log10(num)+1);
 }
 
-int RenderScore()
+int RenderNums(int num, SDL_Texture* textColor, SDL_Rect destRect)
 {
-    int digit;
-    int lenRed = DigitLen(redBoxes);
-    int lenBlue = DigitLen(blueBoxes);
-    int rbox = redBoxes;
-    int bbox = blueBoxes;
-    SDL_Rect destRect = {.x = (lenRed-1)*100, .y = windowy-130, .w = 100, .h = 100};
-
-    if(rbox == 0)
+    do
     {
-        SDL_RenderCopy(rend, redNums, &redNumsRect[0], &destRect);
-    }
-    while(rbox)
-    {
-        SDL_RenderCopy(rend, redNums, &redNumsRect[rbox%10], &destRect);
-        rbox /= 10;
+        SDL_RenderCopy(rend, textColor, &NumsRect[num%10], &destRect);
+        num /= 10;
         destRect.x -= 100;
-    }
-
-    destRect.x = windowx-100;
-    if(bbox == 0)
-    {
-        SDL_RenderCopy(rend, blueNums, &blueNumsRect[0], &destRect);
-    }
-    while(bbox)
-    {
-        SDL_RenderCopy(rend, blueNums, &blueNumsRect[bbox%10], &destRect);
-        bbox /= 10;
-        destRect.x -= 100;
-    }
+    } while(num);
     return 0;
 }
+
+int RenderScore()
+{
+    int lenRed = DigitLen(redBoxes);
+    // int lenBlue = DigitLen(blueBoxes); TODO: is there a better way to render these fonts
+    int rbox = redBoxes;
+    int bbox = blueBoxes;
+    SDL_Rect destRect = {.x = (lenRed-1)*100, .y = windowy-130, .w = 100, .h = 100}; 
+    RenderNums(rbox, redNums, destRect);
+
+    destRect.x = windowx-100;
+    RenderNums(bbox, blueNums, destRect);
+
+    return 0;
+}
+
 
 int RenderBoard(box* boxes)
 {
@@ -514,6 +460,28 @@ int InitGame(box* boxes)
     }
 }
 
+int Free()
+{
+    if(win)
+        SDL_DestroyWindow(win);
+    if(rend)
+        SDL_DestroyRenderer(rend);
+    if(title)
+        SDL_DestroyTexture(title);
+    if(redNums)
+        SDL_DestroyTexture(redNums);
+    if(blueNums)
+        SDL_DestroyTexture(blueNums);
+    if(redWon)
+        SDL_DestroyTexture(redWon);
+    if(blueWon)
+        SDL_DestroyTexture(blueWon);
+    if(draw)
+        SDL_DestroyTexture(draw);
+    SDL_Quit();
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     xDots = 5;
@@ -574,14 +542,6 @@ int main(int argc, char** argv)
         SDL_Delay(16);
     }
 
-    SDL_DestroyTexture(title);
-    SDL_DestroyTexture(redNums);
-    SDL_DestroyTexture(blueNums);
-    SDL_DestroyTexture(redWon);
-    SDL_DestroyTexture(blueWon);
-    SDL_DestroyTexture(draw);
-    SDL_DestroyRenderer(rend);
-    SDL_DestroyWindow(win);
-    SDL_Quit();
+    Free();
     return 0;
 }
